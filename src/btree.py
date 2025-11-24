@@ -1,4 +1,3 @@
-# src/btree.py
 from typing import List, Optional
 
 class BTreeNode:
@@ -10,7 +9,7 @@ class BTreeNode:
         self.leaf = leaf
 
     def is_full(self):
-        return len(self.keys) == 2 * self.t - 1
+        return len(self.keys) >= 2 * self.t - 1
 
 class BTree:
     def __init__(self, t: int = 2):
@@ -33,16 +32,23 @@ class BTree:
         t = self.t
         node = parent.children[index]
         new_node = BTreeNode(t, leaf=node.leaf)
+        # middle key moves up
+        mid_key = node.keys[t-1]
+        mid_val = node.values[t-1] if node.values else None
+
+        # split keys/values
         new_node.keys = node.keys[t:]
         new_node.values = node.values[t:]
         node.keys = node.keys[:t-1]
         node.values = node.values[:t-1]
+
         if not node.leaf:
             new_node.children = node.children[t:]
             node.children = node.children[:t]
+
         parent.children.insert(index+1, new_node)
-        parent.keys.insert(index, node.keys.pop(-1))
-        parent.values.insert(index, node.values.pop(-1))
+        parent.keys.insert(index, mid_key)
+        parent.values.insert(index, mid_val)
 
     def insert_non_full(self, node: BTreeNode, key: str, value):
         i = len(node.keys) - 1
