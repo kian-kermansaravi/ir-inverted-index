@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>B-Tree Inverted Index Search</title>
+  <style>
+    :root {
+      --bg: radial-gradient(circle at 20% 20%, #1d2b64, #0f1628 45%, #0b0f1a 100%);
+      --card: #101828;
+      --accent: #5bd1ff;
+      --accent-2: #8ef6c9;
+      --text: #e8edf5;
+      --muted: #9aa4b5;
+      --border: rgba(255,255,255,0.07);
+      --shadow: 0 15px 40px rgba(0,0,0,0.35);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Inter", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+    .shell {
+      width: min(1100px, 100%);
+      background: linear-gradient(145deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 28px;
+      backdrop-filter: blur(12px);
+    }
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.3px;
+    }
+    p.sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    form {
+      margin: 0;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    input[type="text"] {
+      flex: 1 1 320px;
+      padding: 14px 16px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: #0b1220;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(91, 209, 255, 0.18);
+    }
+    button {
+      padding: 14px 18px;
+      border-radius: var(--radius);
+      border: none;
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      color: #06101c;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 10px 25px rgba(91, 209, 255, 0.25);
+    }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    .results {
+      margin-top: 20px;
+      display: grid;
+      gap: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      transition: transform 0.15s ease;
+    }
+    .card:hover { transform: translateY(-2px); }
+    .score {
+      color: var(--accent-2);
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .doc-id { color: var(--muted); font-size: 13px; margin-left: 8px; }
+    .text { margin: 6px 0 4px; line-height: 1.5; }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      background: rgba(91, 209, 255, 0.12);
+      border: 1px solid rgba(91, 209, 255, 0.35);
+      color: var(--accent);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .empty { color: var(--muted); margin-top: 8px; }
+    footer { margin-top: 16px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 640px) {
+      h1 { font-size: 22px; }
+      button, input[type="text"] { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>B-Tree Inverted Index Search</h1>
+        <p class="sub">Type terms to fetch matching documents. Preprocessing: lowercase, punctuation strip, whitespace squeeze.</p>
+      </div>
+    </header>
+    <form id="search-form">
+      <input id="query" type="text" placeholder="e.g. tree visualization" autocomplete="off" />
+      <button type="submit">Search</button>
+    </form>
+    <div id="results" class="results"></div>
+    <footer>Dataset lives in the server. Scores sum term frequencies across matched terms.</footer>
+  </main>
+  <script>
+    const form = document.getElementById('search-form');
+    const input = document.getElementById('query');
+    const resultsEl = document.getElementById('results');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (!q) return;
+      resultsEl.innerHTML = '<div class="card">Searching?</div>';
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        renderResults(data);
+      } catch (err) {
+        resultsEl.innerHTML = `<div class="card">Error: ${err}</div>`;
+      }
+    });
+
+    function renderResults(data) {
+      const { results } = data;
+      if (!results.length) {
+        resultsEl.innerHTML = '<div class="empty">No documents matched.</div>';
+        return;
+      }
+      resultsEl.innerHTML = results.map(r => {
+        const badges = r.matches.map(m => `<span class="badge">${m.term} ? tf=${m.tf}</span>`).join('');
+        return `
+          <div class="card">
+            <div><span class="score">score ${r.score}</span><span class="doc-id">${r.doc_id}</span></div>
+            <div class="text">${r.text}</div>
+            <div class="badges">${badges}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  </script>
+</body>
+</html>

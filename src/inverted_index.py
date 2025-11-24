@@ -1,51 +1,68 @@
-from typing import Dict, List
-from collections import defaultdict
-from .btree import BTree
-from .tokenizer import tokenize, pre_token_score
-import math
+"""Inverted index that keeps its dictionary in a B-tree."""
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Tuple
+
+from btree import BTree, BTreeNode
+from preprocess import preprocess
+
+
+@dataclass
+class TermStats:
+    df: int = 0
+    postings: Dict[str, int] = field(default_factory=dict)
+
 
 class InvertedIndex:
-    def __init__(self, btree_degree: int = 3):
-        self.dict_tree = BTree(t=btree_degree)
-        self.postings: Dict[str, List[dict]] = defaultdict(list)
-        self.doc_count = 0
-        self.doc_lengths: Dict[str, int] = {}
+    def __init__(self, min_degree: int = 3) -> None:
+        self.dictionary = BTree(min_degree=min_degree)
 
-    def index_document(self, doc_id: str, text: str, metadata: Dict = None):
-        metadata = metadata or {}
-        tokens = tokenize(text)
-        pre_score = pre_token_score(metadata)
-        tf: Dict[str, int] = {}
-        for t in tokens:
-            tf[t] = tf.get(t, 0) + 1
-        for term, freq in tf.items():
-            # append posting
-            self.postings[term].append({"doc": doc_id, "tf": freq, "pre_score": pre_score})
-            # update df in B-tree dictionary
-            entry = self.dict_tree.search(self.dict_tree.root, term)
-            if entry is None:
-                # store a simple dict as value for term entry
-                self.dict_tree.insert(term, {"df": 1})
-            else:
-                if isinstance(entry, dict):
-                    entry["df"] = entry.get("df", 0) + 1
-        self.doc_count += 1
-        self.doc_lengths[doc_id] = sum(tf.values())
+    def add_document(self, doc_id: str, text: str) -> None:
+        tokens = preprocess(text)
+        if not tokens:
+            return
+        frequencies = Counter(tokens)
+        for term, count in frequencies.items():
+            new_stats = TermStats(df=1, postings={doc_id: count})
+            self.dictionary.insert(term, new_stats, merge_fn=self._merge_term_stats)
 
-    def get_postings(self, term: str):
-        return self.postings.get(term, [])
+    @staticmethod
+    def _merge_term_stats(existing: TermStats, incoming: TermStats) -> TermStats:
+        incoming_doc_id, incoming_tf = next(iter(incoming.postings.items()))
+        if incoming_doc_id in existing.postings:
+            existing.postings[incoming_doc_id] += incoming_tf
+        else:
+            existing.postings[incoming_doc_id] = incoming_tf
+            existing.df += 1
+        return existing
 
-    def compute_tf_idf(self, term: str, doc_id: str):
-        postings = self.get_postings(term)
-        N = max(1, self.doc_count)
-        df = len(postings)
-        for p in postings:
-            if p["doc"] == doc_id:
-                tf = p["tf"]
-                idf = math.log((N + 1) / (df + 1)) + 1
-                score = tf * idf * p.get("pre_score", 1.0)
-                return score
-        return 0.0
+    def postings(self, term: str) -> Dict[str, int]:
+        stats = self.dictionary.search(term)
+        return dict(stats.postings) if stats else {}
 
-    def visualize_dict(self):
-        return self.dict_tree.traverse()
+    def iter_terms(self) -> Iterable[Tuple[str, TermStats]]:
+        yield from self._traverse(self.dictionary.root)
+
+    def _traverse(self, node: BTreeNode) -> Iterable[Tuple[str, TermStats]]:
+        if node.leaf:
+            for key, value in zip(node.keys, node.values):
+                yield key, value
+            return
+
+        for i, key in enumerate(node.keys):
+            yield from self._traverse(node.children[i])
+            yield key, node.values[i]
+        yield from self._traverse(node.children[-1])
+
+    def describe(self) -> str:
+        lines: List[str] = ["B-tree dictionary (level order):", self.dictionary.pretty_print(), ""]
+        lines.append("Dictionary entries (in-order traversal):")
+        for term, stats in self.iter_terms():
+            postings_str = ", ".join(f"{doc_id}:{tf}" for doc_id, tf in sorted(stats.postings.items()))
+            lines.append(f"- {term} -> df={stats.df} [{postings_str}]")
+        return "\n".join(lines)
+
+    def __contains__(self, term: str) -> bool:
+        return self.dictionary.search(term) is not None

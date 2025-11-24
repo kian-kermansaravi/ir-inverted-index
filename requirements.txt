@@ -1,2 +1,2 @@
-numpy
-pytest
+pytest>=7.4
+Flask>=3.0

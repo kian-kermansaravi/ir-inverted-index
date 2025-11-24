@@ -1,92 +1,157 @@
-from typing import List, Optional
+"""Minimal B-tree implementation for storing dictionary terms."""
+from __future__ import annotations
 
+from collections import deque
+from dataclasses import dataclass
+from typing import Any, Callable, Deque, List, Optional, Tuple
+
+
+@dataclass
 class BTreeNode:
-    def __init__(self, t: int, leaf: bool = True):
-        self.t = t
-        self.keys: List[str] = []
-        self.values: List = []
-        self.children: List["BTreeNode"] = []
-        self.leaf = leaf
+    min_degree: int
+    leaf: bool = True
 
-    def is_full(self):
-        return len(self.keys) >= 2 * self.t - 1
+    def __post_init__(self) -> None:
+        self.keys: List[str] = []
+        self.values: List[Any] = []
+        self.children: List[BTreeNode] = []
+
+    @property
+    def is_full(self) -> bool:
+        return len(self.keys) == 2 * self.min_degree - 1
+
 
 class BTree:
-    def __init__(self, t: int = 2):
-        self.t = t
-        self.root = BTreeNode(t, leaf=True)
+    def __init__(self, min_degree: int = 3) -> None:
+        if min_degree < 2:
+            raise ValueError("min_degree must be at least 2")
+        self.min_degree = min_degree
+        self.root = BTreeNode(min_degree=min_degree)
 
-    def search(self, node: Optional[BTreeNode], key: str):
-        if node is None:
-            return None
+    def search(self, key: str) -> Optional[Any]:
+        node = self.root
+        while True:
+            i = 0
+            while i < len(node.keys) and key > node.keys[i]:
+                i += 1
+            if i < len(node.keys) and key == node.keys[i]:
+                return node.values[i]
+            if node.leaf:
+                return None
+            node = node.children[i]
+
+    def insert(self, key: str, value: Any, merge_fn: Optional[Callable[[Any, Any], Any]] = None) -> None:
+        # Fast path: if key already exists anywhere, merge/update in place.
+        existing = self.search(key)
+        if existing is not None:
+            if merge_fn:
+                merge_fn(existing, value)
+            else:
+                self._replace_value(self.root, key, value)
+            return
+
+        root = self.root
+        if root.is_full:
+            new_root = BTreeNode(min_degree=self.min_degree, leaf=False)
+            new_root.children.append(root)
+            self._split_child(new_root, 0)
+            self.root = new_root
+            self._insert_non_full(new_root, key, value, merge_fn)
+        else:
+            self._insert_non_full(root, key, value, merge_fn)
+
+    def _replace_value(self, node: BTreeNode, key: str, value: Any) -> bool:
         i = 0
         while i < len(node.keys) and key > node.keys[i]:
             i += 1
-        if i < len(node.keys) and node.keys[i] == key:
-            return node.values[i]
+        if i < len(node.keys) and key == node.keys[i]:
+            node.values[i] = value
+            return True
         if node.leaf:
-            return None
-        return self.search(node.children[i], key)
+            return False
+        return self._replace_value(node.children[i], key, value)
 
-    def split_child(self, parent: BTreeNode, index: int):
-        t = self.t
-        node = parent.children[index]
-        new_node = BTreeNode(t, leaf=node.leaf)
-        # middle key moves up
-        mid_key = node.keys[t-1]
-        mid_val = node.values[t-1] if node.values else None
-
-        # split keys/values
-        new_node.keys = node.keys[t:]
-        new_node.values = node.values[t:]
-        node.keys = node.keys[:t-1]
-        node.values = node.values[:t-1]
-
-        if not node.leaf:
-            new_node.children = node.children[t:]
-            node.children = node.children[:t]
-
-        parent.children.insert(index+1, new_node)
-        parent.keys.insert(index, mid_key)
-        parent.values.insert(index, mid_val)
-
-    def insert_non_full(self, node: BTreeNode, key: str, value):
+    def _insert_non_full(
+        self, node: BTreeNode, key: str, value: Any, merge_fn: Optional[Callable[[Any, Any], Any]]
+    ) -> None:
         i = len(node.keys) - 1
         if node.leaf:
-            node.keys.append(None)
-            node.values.append(None)
-            while i >= 0 and key < node.keys[i]:
-                node.keys[i+1] = node.keys[i]
-                node.values[i+1] = node.values[i]
-                i -= 1
-            node.keys[i+1] = key
-            node.values[i+1] = value
-        else:
             while i >= 0 and key < node.keys[i]:
                 i -= 1
-            i += 1
-            if node.children[i].is_full():
-                self.split_child(node, i)
-                if key > node.keys[i]:
-                    i += 1
-            self.insert_non_full(node.children[i], key, value)
+            if i >= 0 and key == node.keys[i]:
+                node.values[i] = merge_fn(node.values[i], value) if merge_fn else value
+                return
+            node.keys.insert(i + 1, key)
+            node.values.insert(i + 1, value)
+            return
 
-    def insert(self, key: str, value):
-        root = self.root
-        if root.is_full():
-            new_root = BTreeNode(self.t, leaf=False)
-            new_root.children.append(root)
-            self.root = new_root
-            self.split_child(new_root, 0)
-            self.insert_non_full(new_root, key, value)
-        else:
-            self.insert_non_full(root, key, value)
+        while i >= 0 and key < node.keys[i]:
+            i -= 1
+        i += 1
+        if i < len(node.keys) and key == node.keys[i]:
+            node.values[i] = merge_fn(node.values[i], value) if merge_fn else value
+            return
 
-    def traverse(self, node=None, depth=0):
-        if node is None:
-            node = self.root
-        s = "  " * depth + f"Keys: {node.keys}\n"
-        if not node.leaf:
-            for c in node.children:
-                s += self.traverse(c, depth+1)
-        return s
+        if node.children[i].is_full:
+            self._split_child(node, i)
+            if key > node.keys[i]:
+                i += 1
+            elif key == node.keys[i]:
+                node.values[i] = merge_fn(node.values[i], value) if merge_fn else value
+                return
+        self._insert_non_full(node.children[i], key, value, merge_fn)
+
+    def _split_child(self, parent: BTreeNode, index: int) -> None:
+        full_child = parent.children[index]
+        t = self.min_degree
+        new_node = BTreeNode(min_degree=t, leaf=full_child.leaf)
+
+        new_node.keys = full_child.keys[t:]
+        new_node.values = full_child.values[t:]
+
+        mid_key = full_child.keys[t - 1]
+        mid_val = full_child.values[t - 1]
+        full_child.keys = full_child.keys[: t - 1]
+        full_child.values = full_child.values[: t - 1]
+
+        if not full_child.leaf:
+            new_node.children = full_child.children[t:]
+            full_child.children = full_child.children[:t]
+
+        parent.keys.insert(index, mid_key)
+        parent.values.insert(index, mid_val)
+        parent.children.insert(index + 1, new_node)
+
+    def level_strings(self) -> List[str]:
+        if not self.root.keys:
+            return []
+        lines: List[str] = []
+        queue: Deque[Tuple[BTreeNode, int]] = deque([(self.root, 0)])
+        current_level = 0
+        level_nodes: List[str] = []
+
+        while queue:
+            node, level = queue.popleft()
+            if level != current_level:
+                lines.append("  ".join(level_nodes))
+                level_nodes = []
+                current_level = level
+            level_nodes.append("[" + " ".join(node.keys) + "]")
+            for child in node.children:
+                queue.append((child, level + 1))
+
+        if level_nodes:
+            lines.append("  ".join(level_nodes))
+        return lines
+
+    def pretty_print(self) -> str:
+        return "\n".join(self.level_strings()) or "<empty>"
+
+    def __len__(self) -> int:
+        return self._count_nodes(self.root)
+
+    def _count_nodes(self, node: BTreeNode) -> int:
+        total = 1
+        for child in node.children:
+            total += self._count_nodes(child)
+        return total

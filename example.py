@@ -1,26 +1,34 @@
-
-from src.inverted_index import InvertedIndex
-from src.pdf_reader import read_pdf_text
+"""Small usage example for the inverted index."""
+import sys
 from pathlib import Path
 
-def main():
-    idx = InvertedIndex()
-    base = Path.cwd() / "articles"
-    sources = [str(base / f"Article{i}.pdf") for i in (1,2,3)]
+ROOT = Path(__file__).resolve().parent
+sys.path.append(str(ROOT / "src"))
 
-    for i, src in enumerate(sources, start=1):
-        txt = read_pdf_text(src)
-        if not txt:
-            print(f"warning: couldn't read {src}")
-            continue
-        doc_id = f"doc{i}"
-        
-        idx.index_document(doc_id, txt, {"important": False, "length": len(txt)})
+from inverted_index import InvertedIndex  # noqa: E402
 
-    print("B-tree dictionary (traverse):")
-    print(idx.visualize_dict())
-    print("postings for 'retrieval':", idx.get_postings("retrieval"))
-    print("score doc1,retrieval:", idx.compute_tf_idf("retrieval", "doc1"))
+
+def build_example_index() -> InvertedIndex:
+    docs = {
+        "doc1": "The quick brown fox jumps over the lazy dog.",
+        "doc2": "Quick movements help the fox evade predators.",
+        "doc3": "Lazy afternoons are perfect for reading about foxes.",
+    }
+    index = InvertedIndex(min_degree=3)
+    for doc_id, text in docs.items():
+        index.add_document(doc_id, text)
+    return index
+
+
+def main() -> None:
+    index = build_example_index()
+    print(index.describe())
+    print("\nLookup results:")
+    for term in ["quick", "fox", "lazy", "missing"]:
+        postings = index.postings(term)
+        hits = ", ".join(f"{doc_id}:tf={tf}" for doc_id, tf in sorted(postings.items())) or "none"
+        print(f"- {term}: {hits}")
+
 
 if __name__ == "__main__":
     main()
