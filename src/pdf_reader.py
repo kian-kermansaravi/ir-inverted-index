@@ -1,6 +1,5 @@
-# src/pdf_reader.py
-from typing import List
 from pathlib import Path
+from typing import List
 import PyPDF2
 
 def read_pdf_text(path: str) -> str:
@@ -12,7 +11,8 @@ def read_pdf_text(path: str) -> str:
         reader = PyPDF2.PdfReader(f)
         for page in reader.pages:
             try:
-                text_parts.append(page.extract_text() or "")
+                t = page.extract_text() or ""
+                text_parts.append(t)
             except Exception:
                 pass
     return "\n".join(text_parts)
