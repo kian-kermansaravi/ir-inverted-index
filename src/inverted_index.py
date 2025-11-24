@@ -1,4 +1,3 @@
-# src/inverted_index.py
 from typing import Dict, List
 from collections import defaultdict
 from .btree import BTree
@@ -15,20 +14,23 @@ class InvertedIndex:
     def index_document(self, doc_id: str, text: str, metadata: Dict = None):
         metadata = metadata or {}
         tokens = tokenize(text)
-        pre_score = pre_token_score({**metadata, "length": len(text)})
+        pre_score = pre_token_score(metadata)
         tf: Dict[str, int] = {}
         for t in tokens:
             tf[t] = tf.get(t, 0) + 1
         for term, freq in tf.items():
+            # append posting
             self.postings[term].append({"doc": doc_id, "tf": freq, "pre_score": pre_score})
+            # update df in B-tree dictionary
             entry = self.dict_tree.search(self.dict_tree.root, term)
             if entry is None:
+                # store a simple dict as value for term entry
                 self.dict_tree.insert(term, {"df": 1})
             else:
                 if isinstance(entry, dict):
                     entry["df"] = entry.get("df", 0) + 1
         self.doc_count += 1
-        self.doc_lengths[doc_id] = len(tokens)
+        self.doc_lengths[doc_id] = sum(tf.values())
 
     def get_postings(self, term: str):
         return self.postings.get(term, [])
@@ -40,7 +42,7 @@ class InvertedIndex:
         for p in postings:
             if p["doc"] == doc_id:
                 tf = p["tf"]
-                idf = math.log((N+1)/(df+1)) + 1
+                idf = math.log((N + 1) / (df + 1)) + 1
                 score = tf * idf * p.get("pre_score", 1.0)
                 return score
         return 0.0
