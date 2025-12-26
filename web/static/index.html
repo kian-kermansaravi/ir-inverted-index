@@ -124,6 +124,72 @@
     }
     .empty { color: var(--muted); margin-top: 8px; }
     footer { margin-top: 16px; color: var(--muted); font-size: 13px; }
+    
+    /* Upload Section Styles */
+    .upload-section {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding: 16px;
+      background: rgba(91, 209, 255, 0.05);
+      border: 1px dashed rgba(91, 209, 255, 0.3);
+      border-radius: var(--radius);
+    }
+    .upload-section input[type="file"] {
+      flex: 1 1 200px;
+      padding: 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: #0b1220;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .upload-section button {
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+    #show-docs-btn {
+      background: linear-gradient(120deg, #8ef6c9, #5bd1ff);
+    }
+    
+    /* Documents List Styles */
+    .documents-list {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .doc-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .doc-item:last-child { margin-bottom: 0; }
+    .doc-name {
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .doc-preview {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .delete-btn {
+      background: linear-gradient(120deg, #ff6b6b, #ff8e8e);
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    
     @media (max-width: 640px) {
       h1 { font-size: 22px; }
       button, input[type="text"] { width: 100%; }
@@ -138,12 +204,24 @@
         <p class="sub">Type terms to fetch matching documents. Preprocessing: lowercase, punctuation strip, whitespace squeeze.</p>
       </div>
     </header>
+    
+    <!-- Upload Section -->
+    <div class="upload-section">
+      <input type="file" id="file-input" accept=".txt,.md,.py,.json,.csv,.html,.xml,.pdf" />
+      <button id="upload-btn" type="button">Upload Document</button>
+      <button id="show-docs-btn" type="button">Show Documents (<span id="doc-count">0</span>)</button>
+    </div>
+    
     <form id="search-form">
       <input id="query" type="text" placeholder="e.g. tree visualization" autocomplete="off" />
       <button type="submit">Search</button>
     </form>
+    
+    <!-- Documents List -->
+    <div id="documents-list" class="documents-list" style="display: none;"></div>
+    
     <div id="results" class="results"></div>
-    <footer>Dataset lives in the server. Scores sum term frequencies across matched terms.</footer>
+    <footer>Documents are stored in the /documents folder. Scores sum term frequencies across matched terms.</footer>
   </main>
   <script>
     const form = document.getElementById('search-form');
@@ -171,7 +249,7 @@
         return;
       }
       resultsEl.innerHTML = results.map(r => {
-        const badges = r.matches.map(m => `<span class="badge">${m.term} ? tf=${m.tf}</span>`).join('');
+        const badges = r.matches.map(m => `<span class="badge">${m.term} · tf=${m.tf}</span>`).join('');
         return `
           <div class="card">
             <div><span class="score">score ${r.score}</span><span class="doc-id">${r.doc_id}</span></div>
@@ -180,6 +258,108 @@
           </div>
         `;
       }).join('');
+    }
+
+    // Upload functionality
+    const fileInput = document.getElementById('file-input');
+    const uploadBtn = document.getElementById('upload-btn');
+    const showDocsBtn = document.getElementById('show-docs-btn');
+    const docsList = document.getElementById('documents-list');
+    const docCount = document.getElementById('doc-count');
+
+    // Load document count on page load
+    async function loadDocCount() {
+      try {
+        const res = await fetch('/api/documents');
+        const data = await res.json();
+        docCount.textContent = data.total;
+      } catch (err) {
+        console.error('Error loading docs:', err);
+      }
+    }
+    loadDocCount();
+
+    uploadBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        alert('Please select a file first');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        uploadBtn.textContent = 'Uploading...';
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(`File "${data.filename}" uploaded successfully!`);
+          fileInput.value = '';
+          docCount.textContent = data.total_docs;
+          loadDocuments();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Upload failed: ' + err);
+      } finally {
+        uploadBtn.textContent = 'Upload Document';
+      }
+    });
+
+    showDocsBtn.addEventListener('click', () => {
+      if (docsList.style.display === 'none') {
+        loadDocuments();
+        docsList.style.display = 'block';
+      } else {
+        docsList.style.display = 'none';
+      }
+    });
+
+    async function loadDocuments() {
+      try {
+        const res = await fetch('/api/documents');
+        const data = await res.json();
+        docCount.textContent = data.total;
+        
+        if (data.documents.length === 0) {
+          docsList.innerHTML = '<div class="empty">No documents yet. Upload some files!</div>';
+          return;
+        }
+        
+        docsList.innerHTML = data.documents.map(doc => `
+          <div class="doc-item">
+            <div>
+              <div class="doc-name">${doc.id}</div>
+              <div class="doc-preview">${doc.preview}</div>
+            </div>
+            <button class="delete-btn" onclick="deleteDoc('${doc.id}')">Delete</button>
+          </div>
+        `).join('');
+      } catch (err) {
+        docsList.innerHTML = `<div class="empty">Error loading documents: ${err}</div>`;
+      }
+    }
+
+    async function deleteDoc(docId) {
+      if (!confirm(`Delete "${docId}"?`)) return;
+      
+      try {
+        const res = await fetch(`/api/delete/${docId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          loadDocuments();
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Delete failed: ' + err);
+      }
     }
   </script>
 </body>
