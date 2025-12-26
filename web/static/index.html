@@ -194,6 +194,60 @@
       h1 { font-size: 22px; }
       button, input[type="text"] { width: 100%; }
     }
+    
+    /* System Selector Styles */
+    .system-selector {
+      margin-bottom: 16px;
+      padding: 16px;
+      background: rgba(142, 246, 201, 0.05);
+      border: 1px solid rgba(142, 246, 201, 0.2);
+      border-radius: var(--radius);
+    }
+    .system-selector label {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--accent-2);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .system-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .system-option {
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 13px;
+    }
+    .system-option:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .system-option.active {
+      background: linear-gradient(120deg, var(--accent), var(--accent-2));
+      color: #06101c;
+      border-color: transparent;
+      font-weight: 600;
+    }
+    .system-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .system-name {
+      color: var(--accent);
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -201,9 +255,16 @@
     <header>
       <div>
         <h1>B-Tree Inverted Index Search</h1>
-        <p class="sub">Type terms to fetch matching documents. Preprocessing: lowercase, punctuation strip, whitespace squeeze.</p>
+        <p class="sub">Advanced IR System with multiple retrieval models. Boolean operators supported: AND, OR, NOT</p>
       </div>
     </header>
+    
+    <!-- Retrieval System Selector -->
+    <div class="system-selector">
+      <label>🔍 Select Retrieval System:</label>
+      <div class="system-options" id="system-options"></div>
+      <div class="system-info" id="system-info"></div>
+    </div>
     
     <!-- Upload Section -->
     <div class="upload-section">
@@ -213,7 +274,7 @@
     </div>
     
     <form id="search-form">
-      <input id="query" type="text" placeholder="e.g. tree visualization" autocomplete="off" />
+      <input id="query" type="text" placeholder="e.g. brain AND tumor, information OR retrieval, deep NOT learning" autocomplete="off" />
       <button type="submit">Search</button>
     </form>
     
@@ -227,14 +288,74 @@
     const form = document.getElementById('search-form');
     const input = document.getElementById('query');
     const resultsEl = document.getElementById('results');
+    const systemOptionsEl = document.getElementById('system-options');
+    const systemInfoEl = document.getElementById('system-info');
+    
+    // Current selected system
+    let currentSystem = 'tfidf';
+    let systemsData = [];
+    
+    // System descriptions
+    const systemDescriptions = {
+      'boolean': 'Uses AND, OR, NOT operators. Returns all matching documents without ranking. Example: "brain AND tumor NOT cancer"',
+      'tfidf': 'Term Frequency × Inverse Document Frequency. Balances term importance in document vs corpus. Classic ranking method.',
+      'bm25': 'Best Matching 25 - State-of-the-art probabilistic model. Used by modern search engines. Handles document length normalization.',
+      'probabilistic': 'Binary Independence Model. Based on probability theory. Assumes term independence given relevance.'
+    };
+    
+    // Load available systems
+    async function loadSystems() {
+      try {
+        const res = await fetch('/api/systems');
+        const data = await res.json();
+        systemsData = data.systems;
+        currentSystem = data.default;
+        renderSystemOptions();
+      } catch (err) {
+        console.error('Error loading systems:', err);
+      }
+    }
+    
+    function renderSystemOptions() {
+      systemOptionsEl.innerHTML = systemsData.map(s => `
+        <button type="button" class="system-option ${s.id === currentSystem ? 'active' : ''}" 
+                data-system="${s.id}" ${!s.available ? 'disabled' : ''}>
+          ${s.id.toUpperCase()}
+        </button>
+      `).join('');
+      
+      // Add click handlers
+      systemOptionsEl.querySelectorAll('.system-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentSystem = btn.dataset.system;
+          systemOptionsEl.querySelectorAll('.system-option').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          updateSystemInfo();
+        });
+      });
+      
+      updateSystemInfo();
+    }
+    
+    function updateSystemInfo() {
+      const system = systemsData.find(s => s.id === currentSystem);
+      if (system) {
+        systemInfoEl.innerHTML = `
+          <div class="system-name">${system.name}</div>
+          <div>${systemDescriptions[currentSystem] || ''}</div>
+        `;
+      }
+    }
+    
+    loadSystems();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const q = input.value.trim();
       if (!q) return;
-      resultsEl.innerHTML = '<div class="card">Searching?</div>';
+      resultsEl.innerHTML = '<div class="card">Searching...</div>';
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&system=${currentSystem}`);
         const data = await res.json();
         renderResults(data);
       } catch (err) {
@@ -243,13 +364,25 @@
     });
 
     function renderResults(data) {
-      const { results } = data;
+      const { results, system_name } = data;
       if (!results.length) {
         resultsEl.innerHTML = '<div class="empty">No documents matched.</div>';
         return;
       }
-      resultsEl.innerHTML = results.map(r => {
-        const badges = r.matches.map(m => `<span class="badge">${m.term} · tf=${m.tf}</span>`).join('');
+      
+      // Header showing which system was used
+      let html = `<div class="card" style="background: rgba(91, 209, 255, 0.1); margin-bottom: 12px;">
+        <span style="color: var(--accent);">📊 Results from: ${system_name || currentSystem.toUpperCase()}</span>
+        <span style="color: var(--muted); margin-left: 12px;">${results.length} document(s) found</span>
+      </div>`;
+      
+      html += results.map(r => {
+        const badges = (r.matches || []).map(m => {
+          if (typeof m === 'string') {
+            return `<span class="badge">${m}</span>`;
+          }
+          return `<span class="badge">${m.term} · tf=${m.tf}</span>`;
+        }).join('');
         return `
           <div class="card">
             <div><span class="score">score ${r.score}</span><span class="doc-id">${r.doc_id}</span></div>
@@ -258,6 +391,8 @@
           </div>
         `;
       }).join('');
+      
+      resultsEl.innerHTML = html;
     }
 
     // Upload functionality

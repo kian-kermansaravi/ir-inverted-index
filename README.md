@@ -1,26 +1,49 @@
 # Inverted Index with B-Tree Dictionary
 
-A small IR project that builds a standard inverted index while keeping the term dictionary in a B-tree. The pipeline includes text cleanup (pre-token steps), tokenization, indexing, and the ability to print the B-tree layout.
+A comprehensive Information Retrieval (IR) system that implements multiple retrieval models with a B-tree based inverted index. This project demonstrates various IR concepts including Boolean retrieval, TF-IDF ranking, BM25, and probabilistic models.
 
-## Features
+## 🚀 Features
+
+### Core Features
 - Text normalization (lowercasing, punctuation strip, whitespace squeeze) before tokenization.
 - Simple whitespace tokenizer with empty-token filtering.
 - In-memory B-tree dictionary that stores each term with its postings list and term frequency per document.
 - Tree visualization helper to print internal nodes and leaves in level order.
-- Query helper to fetch postings for a term.
-- Demo script that indexes a small document set and shows the tree.
-- Interactive search CLI that returns documents for entered terms.
-- Duplicate terms across documents merge into a single dictionary entry with combined postings.
+- PDF document support with text extraction.
+- Web-based UI for searching and document management.
+
+### Retrieval Systems (نمره اضافه ⭐)
+
+| System | Description |
+|--------|-------------|
+| **Boolean** | Supports AND, OR, NOT operators. No ranking. |
+| **TF-IDF** | Term Frequency × Inverse Document Frequency ranking |
+| **BM25** | Best Matching 25 - State-of-the-art probabilistic ranking |
+| **Probabilistic** | Binary Independence Model (BIM) |
+
+### Boolean Query Examples
+```
+brain AND tumor          # Documents containing both terms
+information OR retrieval # Documents containing either term
+deep NOT learning        # Documents with "deep" but not "learning"
+brain AND tumor NOT cancer # Complex boolean expression
+```
 
 ## Project Structure
-- `src/btree.py` - Minimal B-tree implementation for term dictionary storage.
-- `src/preprocess.py` - Text normalization and tokenization helpers.
-- `src/inverted_index.py` - Inverted index that uses the B-tree dictionary.
-- `main.py` - Demo runner: builds the index, prints the tree, and runs a few sample lookups.
-- `example.py` - Additional example that builds an index from a small set of documents and shows lookups.
-- `search_cli.py` - Simple interactive search prompt; enter terms to see matching documents.
-- `web_server.py` + `web/static/index.html` - Minimal Flask API and static frontend for searching.
-- `tests/` - Pytest suite covering preprocessing and inverted index behavior.
+```
+├── src/
+│   ├── btree.py              # B-tree implementation for term dictionary
+│   ├── preprocess.py         # Text normalization and tokenization
+│   ├── inverted_index.py     # Core inverted index with B-tree dictionary
+│   └── retrieval_systems.py  # Multiple IR models (Boolean, TF-IDF, BM25, Probabilistic)
+├── web/
+│   └── static/index.html     # Web UI for searching
+├── documents/                 # Upload your documents here (PDF, TXT, etc.)
+├── web_server.py             # Flask API server
+├── main.py                   # Demo runner
+├── search_cli.py             # Interactive CLI search
+└── tests/                    # Pytest test suite
+```
 
 ## Setup
 Python 3.10+ recommended.
@@ -32,22 +55,22 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-Run the main demo:
-```bash
-python main.py
-```
-Run the additional example:
-```bash
-python example.py
-```
-Run the interactive search prompt:
-```bash
-python search_cli.py
-```
-Run the web app:
+
+### Web Interface (Recommended)
 ```bash
 python web_server.py
-# then open http://localhost:5000
+# Open http://localhost:5000
+```
+
+Features:
+- Select retrieval system (Boolean, TF-IDF, BM25, Probabilistic)
+- Upload PDF/TXT documents
+- Search with Boolean operators
+
+### Command Line
+```bash
+python main.py      # Demo with sample documents
+python search_cli.py  # Interactive search prompt
 ```
 
 ## Tests

@@ -21,11 +21,22 @@ sys.path.append(str(ROOT / "src"))
 
 from inverted_index import InvertedIndex  # noqa: E402
 from preprocess import preprocess  # noqa: E402
+from retrieval_systems import (  # noqa: E402
+    get_retrieval_system, 
+    AVAILABLE_SYSTEMS,
+    BooleanRetrieval,
+    TFIDFRetrieval,
+    BM25Retrieval,
+    ProbabilisticRetrieval,
+)
 
 # Documents storage
 DOCS: Dict[str, str] = {}
 DOCUMENTS_FOLDER = ROOT / "documents"
 DOCUMENTS_FOLDER.mkdir(exist_ok=True)
+
+# Retrieval systems cache
+retrieval_systems: Dict[str, object] = {}
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'.txt', '.md', '.py', '.json', '.csv', '.html', '.xml', '.pdf'}
@@ -74,6 +85,23 @@ def load_documents_from_folder():
                 print(f"Error loading {file_path}: {e}")
     
     print(f"Total documents loaded: {len(DOCS)}")
+    
+    # Initialize retrieval systems
+    _init_retrieval_systems()
+
+
+def _init_retrieval_systems():
+    """Initialize all retrieval systems."""
+    global retrieval_systems
+    retrieval_systems.clear()
+    
+    if DOCS:
+        for system_type in AVAILABLE_SYSTEMS.keys():
+            try:
+                retrieval_systems[system_type] = get_retrieval_system(system_type, index, DOCS)
+                print(f"Initialized {system_type} retrieval system")
+            except Exception as e:
+                print(f"Error initializing {system_type}: {e}")
 
 
 # Initial load
@@ -89,28 +117,84 @@ def root() -> object:
 
 @app.route("/api/search")
 def api_search() -> object:
+    """
+    Search API supporting multiple retrieval systems.
+    
+    Query params:
+        q: The search query
+        system: Retrieval system to use (boolean, tfidf, bm25, probabilistic)
+                Default: tfidf
+    """
     query = request.args.get("q", "")
-    terms = preprocess(query)
-    scores: Dict[str, int] = defaultdict(int)
-    matches: Dict[str, List[Dict[str, object]]] = defaultdict(list)
+    system_type = request.args.get("system", "tfidf").lower()
+    
+    if not query.strip():
+        return jsonify({"query": "", "terms": [], "results": [], "system": system_type})
+    
+    # Get the retrieval system
+    if system_type not in retrieval_systems:
+        # Fallback to simple term frequency
+        terms = preprocess(query)
+        scores: Dict[str, int] = defaultdict(int)
+        matches: Dict[str, List[Dict[str, object]]] = defaultdict(list)
 
-    for term in terms:
-        postings = index.postings(term)
-        for doc_id, tf in postings.items():
-            scores[doc_id] += tf
-            matches[doc_id].append({"term": term, "tf": tf})
+        for term in terms:
+            postings = index.postings(term)
+            for doc_id, tf in postings.items():
+                scores[doc_id] += tf
+                matches[doc_id].append({"term": term, "tf": tf})
 
+        results = [
+            {
+                "doc_id": doc_id,
+                "score": scores[doc_id],
+                "text": DOCS[doc_id][:500] + ("..." if len(DOCS[doc_id]) > 500 else ""),
+                "matches": [m["term"] for m in matches[doc_id]],
+            }
+            for doc_id in scores
+        ]
+        results.sort(key=lambda item: item["score"], reverse=True)
+        return jsonify({
+            "query": query, 
+            "terms": terms, 
+            "results": results, 
+            "system": "simple",
+            "system_name": "Simple Term Frequency"
+        })
+    
+    # Use the selected retrieval system
+    retrieval = retrieval_systems[system_type]
+    search_results = retrieval.search(query)
+    
     results = [
         {
-            "doc_id": doc_id,
-            "score": scores[doc_id],
-            "text": DOCS[doc_id][:500] + ("..." if len(DOCS[doc_id]) > 500 else ""),
-            "matches": matches[doc_id],
+            "doc_id": r.doc_id,
+            "score": r.score,
+            "text": r.text[:500] + ("..." if len(r.text) > 500 else ""),
+            "matches": r.matched_terms,
         }
-        for doc_id in scores
+        for r in search_results
     ]
-    results.sort(key=lambda item: item["score"], reverse=True)
-    return jsonify({"query": query, "terms": terms, "results": results})
+    
+    return jsonify({
+        "query": query,
+        "terms": preprocess(query),
+        "results": results,
+        "system": system_type,
+        "system_name": retrieval.name
+    })
+
+
+@app.route("/api/systems")
+def api_systems():
+    """List available retrieval systems."""
+    return jsonify({
+        "systems": [
+            {"id": k, "name": v, "available": k in retrieval_systems}
+            for k, v in AVAILABLE_SYSTEMS.items()
+        ],
+        "default": "tfidf"
+    })
 
 
 @app.route("/api/upload", methods=["POST"])
