@@ -1,4 +1,3 @@
-"""Minimal Flask server exposing inverted index search with a static frontend.""" 
 from __future__ import annotations
 
 import os
@@ -45,7 +44,6 @@ index = InvertedIndex(min_degree=3)
 
 
 def extract_text_from_pdf(file_path: Path) -> str:
-    """Extract text from a PDF file."""
     if not PDF_SUPPORT:
         return ""
     try:
@@ -61,7 +59,6 @@ def extract_text_from_pdf(file_path: Path) -> str:
 
 
 def load_documents_from_folder():
-    """Load all text files from the documents folder."""
     global DOCS, index
     DOCS.clear()
     index = InvertedIndex(min_degree=3)
@@ -91,7 +88,6 @@ def load_documents_from_folder():
 
 
 def _init_retrieval_systems():
-    """Initialize all retrieval systems."""
     global retrieval_systems
     retrieval_systems.clear()
     
@@ -117,14 +113,6 @@ def root() -> object:
 
 @app.route("/api/search")
 def api_search() -> object:
-    """
-    Search API supporting multiple retrieval systems.
-    
-    Query params:
-        q: The search query
-        system: Retrieval system to use (boolean, tfidf, bm25, probabilistic)
-                Default: tfidf
-    """
     query = request.args.get("q", "")
     system_type = request.args.get("system", "tfidf").lower()
     
@@ -187,7 +175,6 @@ def api_search() -> object:
 
 @app.route("/api/systems")
 def api_systems():
-    """List available retrieval systems."""
     return jsonify({
         "systems": [
             {"id": k, "name": v, "available": k in retrieval_systems}
@@ -199,7 +186,6 @@ def api_systems():
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
-    """Upload a new document file."""
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
     
@@ -224,7 +210,6 @@ def api_upload():
 
 @app.route("/api/documents")
 def api_documents():
-    """List all documents."""
     return jsonify({
         "documents": [
             {"id": doc_id, "preview": text[:200] + ("..." if len(text) > 200 else "")}
@@ -236,7 +221,6 @@ def api_documents():
 
 @app.route("/api/delete/<doc_id>", methods=["DELETE"])
 def api_delete(doc_id: str):
-    """Delete a document."""
     file_path = DOCUMENTS_FOLDER / doc_id
     if file_path.exists():
         file_path.unlink()
@@ -247,7 +231,6 @@ def api_delete(doc_id: str):
 
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
-    """Reload documents from folder."""
     load_documents_from_folder()
     return jsonify({"success": True, "total_docs": len(DOCS)})
 

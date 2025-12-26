@@ -1,79 +1,53 @@
 # Inverted Index with B-Tree Dictionary
 
-A comprehensive Information Retrieval (IR) system that implements multiple retrieval models with a B-tree based inverted index. This project demonstrates various IR concepts including Boolean retrieval, TF-IDF ranking, BM25, and probabilistic models.
+سیستم بازیابی اطلاعات با پیاده‌سازی چندین مدل بازیابی و ایندکس معکوس مبتنی بر B-tree
 
-## 🚀 Features
+## امکانات
 
-### Core Features
-- Text normalization (lowercasing, punctuation strip, whitespace squeeze) before tokenization.
-- Simple whitespace tokenizer with empty-token filtering.
-- In-memory B-tree dictionary that stores each term with its postings list and term frequency per document.
-- Tree visualization helper to print internal nodes and leaves in level order.
-- PDF document support with text extraction.
-- Web-based UI for searching and document management.
+- نرمال‌سازی متن (lowercase، حذف علائم نگارشی)
+- توکنایزر ساده
+- دیکشنری B-tree برای ذخیره ترم‌ها
+- پشتیبانی از PDF
+- رابط وب
 
-### Retrieval Systems (نمره اضافه ⭐)
+## سیستم‌های بازیابی
 
-| System | Description |
-|--------|-------------|
-| **Boolean** | Supports AND, OR, NOT operators. No ranking. |
-| **TF-IDF** | Term Frequency × Inverse Document Frequency ranking |
-| **BM25** | Best Matching 25 - State-of-the-art probabilistic ranking |
-| **Probabilistic** | Binary Independence Model (BIM) |
+| سیستم | توضیح |
+|-------|-------|
+| Boolean | عملگرهای AND, OR, NOT |
+| TF-IDF | رتبه‌بندی بر اساس فرکانس ترم |
+| BM25 | مدل احتمالاتی پیشرفته |
+| Probabilistic | مدل استقلال دودویی |
 
-### Boolean Query Examples
+## نمونه کوئری‌ها
 ```
-brain AND tumor          # Documents containing both terms
-information OR retrieval # Documents containing either term
-deep NOT learning        # Documents with "deep" but not "learning"
-brain AND tumor NOT cancer # Complex boolean expression
+brain AND tumor
+information OR retrieval
+deep NOT learning
 ```
 
-## Project Structure
+## ساختار پروژه
 ```
-├── src/
-│   ├── btree.py              # B-tree implementation for term dictionary
-│   ├── preprocess.py         # Text normalization and tokenization
-│   ├── inverted_index.py     # Core inverted index with B-tree dictionary
-│   └── retrieval_systems.py  # Multiple IR models (Boolean, TF-IDF, BM25, Probabilistic)
-├── web/
-│   └── static/index.html     # Web UI for searching
-├── documents/                 # Upload your documents here (PDF, TXT, etc.)
-├── web_server.py             # Flask API server
-├── main.py                   # Demo runner
-├── search_cli.py             # Interactive CLI search
-└── tests/                    # Pytest test suite
+src/
+  btree.py              - پیاده‌سازی B-tree
+  preprocess.py         - نرمال‌سازی و توکنایز
+  inverted_index.py     - ایندکس معکوس
+  retrieval_systems.py  - سیستم‌های بازیابی
+web/
+  static/index.html     - رابط وب
+documents/              - محل آپلود فایل‌ها
+web_server.py           - سرور Flask
 ```
 
-## Setup
-Python 3.10+ recommended.
-
+## نصب
 ```bash
 python -m venv .venv
-.venv\Scripts\activate  # Windows
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Usage
-
-### Web Interface (Recommended)
+## اجرا
 ```bash
 python web_server.py
-# Open http://localhost:5000
-```
-
-Features:
-- Select retrieval system (Boolean, TF-IDF, BM25, Probabilistic)
-- Upload PDF/TXT documents
-- Search with Boolean operators
-
-### Command Line
-```bash
-python main.py      # Demo with sample documents
-python search_cli.py  # Interactive search prompt
-```
-
-## Tests
-```bash
-pytest
+# http://localhost:5000
 ```
